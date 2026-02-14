@@ -1,0 +1,111 @@
+import os
+import logging
+from typing import AsyncGenerator
+from typing_extensions import override
+
+from google.adk.agents import BaseAgent, LlmAgent, ParallelAgent
+from google.adk.agents.invocation_context import InvocationContext
+from google.adk.events import Event
+from google.genai import types
+
+from .sub_agents.CardiologyAgent import cardiology_llm_agent
+
+
+logger = logging.getLogger(__name__)
+
+
+class SpecialistCouncilAgent(BaseAgent):
+    """
+    Runs specialist medical reasoning agents in parallel.
+    """
+
+    cardiology_llm: LlmAgent
+    
+
+    specialist_parallel: ParallelAgent
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    def __init__(
+        self,
+        name: str,
+        cardiology_llm: LlmAgent,
+        
+    ):
+        # 🔹 Create Parallel Specialist Council
+        specialist_parallel = ParallelAgent(
+            name="SpecialistParallelAnalysis",
+            sub_agents=[
+                cardiology_llm,
+            ],
+        )
+
+        # 🔹 Register with BaseAgent
+        super().__init__(
+            name=name,
+            cardiology_llm=cardiology_llm,
+            specialist_parallel=specialist_parallel,
+            sub_agents=[
+                specialist_parallel,
+            ],
+        )
+
+    # ─────────────────────────────────────────────
+    # Main execution
+    # ─────────────────────────────────────────────
+    @override
+    async def _run_async_impl(
+        self, ctx: InvocationContext
+    ) -> AsyncGenerator[Event, None]:
+
+        classification_result = ctx.session.state.get("classification_result")
+
+        if not classification_result:
+            yield Event(
+                author=self.name,
+                content=types.Content(
+                    role="assistant",
+                    parts=[types.Part(
+                        text="No classification_result found. Specialists cannot proceed."
+                    )]
+                )
+            )
+            return
+
+        logger.info(f"[{self.name}] Running specialist council analysis")
+
+        yield Event(
+            author=self.name,
+            content=types.Content(
+                role="assistant",
+                parts=[types.Part(
+                    text="🩺 Specialist Council Activated: Cardiology + Neurology"
+                )]
+            )
+        )
+
+        # 🫀🧠 Run specialists in parallel
+        async for event in self.specialist_parallel.run_async(ctx):
+            yield event
+
+        logger.info(f"[{self.name}] Specialist council completed")
+
+        yield Event(
+            author=self.name,
+            content=types.Content(
+                role="assistant",
+                parts=[types.Part(
+                    text="✅ Specialist Council Analysis Complete"
+                )]
+            )
+        )
+
+
+# ============================================================
+# EXPORT
+# ============================================================
+
+SpecialistCouncil = SpecialistCouncilAgent(
+    name="SpecialistCouncilAgent",
+    cardiology_llm=cardiology_llm_agent,
+)
