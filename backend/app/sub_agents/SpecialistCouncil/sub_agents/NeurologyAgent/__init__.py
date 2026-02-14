@@ -1,1 +1,1 @@
-from .agent import coach_visual_llm
+from .agent import neurology_llm_agent

@@ -9,6 +9,12 @@ from google.adk.events import Event
 from google.genai import types
 
 from .sub_agents.CardiologyAgent import cardiology_llm_agent
+from .sub_agents.NeurologyAgent import neurology_llm_agent 
+from .sub_agents.GeneralMedicine import general_medicine_llm_agent
+from .sub_agents.EmergencyMedicine import emergency_llm_agent
+from .sub_agents.OtherSpecialityAgent import other_specialty_llm_agent
+from .sub_agents.PulmonologyAgent import pulmonology_llm_agent 
+
 
 
 logger = logging.getLogger(__name__)
@@ -20,6 +26,11 @@ class SpecialistCouncilAgent(BaseAgent):
     """
 
     cardiology_llm: LlmAgent
+    neurology_llm: LlmAgent
+    general_medicine_llm: LlmAgent
+    emergency_llm: LlmAgent
+    pulmonology_llm: LlmAgent
+    other_specialty_llm: LlmAgent
     
 
     specialist_parallel: ParallelAgent
@@ -30,13 +41,22 @@ class SpecialistCouncilAgent(BaseAgent):
         self,
         name: str,
         cardiology_llm: LlmAgent,
-        
+        neurology_llm: LlmAgent,
+        general_medicine_llm: LlmAgent,
+        emergency_llm: LlmAgent,
+        pulmonology_llm: LlmAgent,
+        other_specialty_llm: LlmAgent,
     ):
         # 🔹 Create Parallel Specialist Council
         specialist_parallel = ParallelAgent(
             name="SpecialistParallelAnalysis",
             sub_agents=[
                 cardiology_llm,
+                neurology_llm,
+                general_medicine_llm,
+                emergency_llm,
+                pulmonology_llm,
+                other_specialty_llm,
             ],
         )
 
@@ -44,6 +64,11 @@ class SpecialistCouncilAgent(BaseAgent):
         super().__init__(
             name=name,
             cardiology_llm=cardiology_llm,
+            neurology_llm=neurology_llm,
+            general_medicine_llm=general_medicine_llm,
+            emergency_llm=emergency_llm,
+            pulmonology_llm=pulmonology_llm,
+            other_specialty_llm=other_specialty_llm,
             specialist_parallel=specialist_parallel,
             sub_agents=[
                 specialist_parallel,
@@ -108,4 +133,9 @@ class SpecialistCouncilAgent(BaseAgent):
 SpecialistCouncil = SpecialistCouncilAgent(
     name="SpecialistCouncilAgent",
     cardiology_llm=cardiology_llm_agent,
+    neurology_llm=neurology_llm_agent,
+    general_medicine_llm=general_medicine_llm_agent,
+    emergency_llm=emergency_llm_agent,
+    pulmonology_llm=pulmonology_llm_agent,
+    other_specialty_llm=other_specialty_llm_agent,
 )

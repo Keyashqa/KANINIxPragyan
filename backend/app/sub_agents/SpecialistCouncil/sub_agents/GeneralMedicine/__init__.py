@@ -1,1 +1,1 @@
-from .agent import opponent_visual_llm
+from .agent import general_medicine_llm_agent

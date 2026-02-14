@@ -1,1 +1,1 @@
-from .agent import manager_visual_llm
+from .agent import pulmonology_llm_agent
