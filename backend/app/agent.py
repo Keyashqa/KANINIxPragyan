@@ -5,5 +5,5 @@ from .sub_agents.CMOAgent import CMOAgent
 
 root_agent = SequentialAgent(
     name="RootAgent",
-    sub_agents=[ClassificationAgent, SpecialistCouncil, CMOAgent]
+    sub_agents=[ClassificationAgent,CMOAgent]
 )

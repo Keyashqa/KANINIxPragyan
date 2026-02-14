@@ -313,15 +313,53 @@ class ClassificationAgentImpl(BaseAgent):
 
         ctx.session.state["classification_result"] = classification_result
 
-        self._debug_print(classification_result)
+        self._debug_print(classification_result) 
 
+        # 🧾 Human-readable ML summary (NO hallucination)
+        risk_level = prediction["risk_level"]
+        max_conf = prediction["max_confidence"]
+
+        summary_text = (
+            f"🚦 RISK LEVEL: {risk_level}\n"
+            f"Confidence: {max_conf}%"
+        )
+
+        # 1️⃣ Emit readable summary first
         yield Event(
             author=self.name,
             content=types.Content(
                 role="assistant",
-                parts=[types.Part(text=f"[{self.name}] ✅ Classification Complete")]
+                parts=[types.Part(text=summary_text)],
             ),
         )
+
+
+        # 1️⃣ Emit structured JSON event (THIS is the key upgrade)
+        yield Event(
+            author=self.name,
+            content=types.Content(
+                role="assistant",
+                parts=[
+                    types.Part(
+                        text=json.dumps(classification_result)
+                    )
+                ],
+            ),
+        )
+
+        # 2️⃣ Emit completion message (optional but nice)
+        yield Event(
+            author=self.name,
+            content=types.Content(
+                role="assistant",
+                parts=[
+                    types.Part(
+                        text=f"[{self.name}] ✅ Classification Complete"
+                    )
+                ],
+            ),
+        )
+
 
 
 # ============================================================

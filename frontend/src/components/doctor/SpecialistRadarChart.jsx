@@ -9,8 +9,8 @@ export default function SpecialistRadarChart({ opinions }) {
 
   const data = opinions.map((op) => ({
     specialty: op.specialty.replace(' Medicine', ''),
-    relevance: Math.round(op.relevance_score * 100),
-    urgency: Math.round(op.urgency_score * 100),
+    relevance: Math.round(op.relevance_score * 10),
+    urgency: Math.round(op.urgency_score * 10),
   }));
 
   return (

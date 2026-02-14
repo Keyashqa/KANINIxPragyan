@@ -49,7 +49,71 @@ export default function LiveTriageStream() {
         setSpecialists((prev) => [...prev, event.data]);
       } else if (event.type === 'cmo_verdict') {
         setVerdict(event.data);
-        setResult(event.data);
+        // Merge verdict with collected specialists and patient info
+        // to create a complete record for the result/history
+        const completeRecord = {
+          ...currentPatient, // Patient ID, Name, Age, Gender, Vitals
+          ...event.data,    // CMO Verdict fields (overwrites duplicates if any)
+          specialist_opinions: specialists, // Detailed specialist outputs from stream
+          // Ensure keys match what components expect
+          action: event.data.recommended_action,
+          requires_referral: event.data.referral_needed,
+          referral_reason: event.data.referral_details,
+          ml_risk_assessment: event.data.ml_risk_level,
+        };
+        setResult(completeRecord);
+        setPhase('complete');
+      } else if (event.type === 'complete') {
+        setPhase('complete');
+      }
+    };
+
+    submitTriage(currentPatient, handleEvent);
+  }, [specialists]); // Add specialists to dep array or use functional update?
+  // Actually specialists is state. Accessing it inside useEffect callback which is created once (dependency []) is a closure problem!
+  // 'specialists' will be [] in the closure of handleEvent if defined inside useEffect with [] dep.
+  //
+  // FIX: Use functional state update for setSpecialists, but for setResult we need the *current* specialists.
+  // Using a ref is better for 'specialists' accumulator if we need to access it in the final event.
+  // Or simpler: just use the functional update pattern for everything, but here we need to READ specialists.
+  // Relies on event order? 
+  // 
+  // Refactoring:
+  // Move handleEvent outside or use Ref for specialists accumulator.
+
+  const specialistsRef = useRef([]);
+
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+
+    const handleEvent = (event) => {
+      addStreamEvent(event);
+
+      if (event.type === 'status') {
+        setPhase(event.data.phase);
+        setStatusMsg(event.data.message);
+      } else if (event.type === 'classification_result') {
+        setClassification(event.data);
+        setPhase('classification_done');
+      } else if (event.type === 'specialist_opinion') {
+        setSpecialists((prev) => [...prev, event.data]);
+        specialistsRef.current.push(event.data); // Keep Ref in sync for final read
+      } else if (event.type === 'cmo_verdict') {
+        setVerdict(event.data);
+
+        const completeRecord = {
+          ...currentPatient,
+          ...event.data,
+          specialist_opinions: specialistsRef.current,
+          // Mappings for compatibility
+          action: event.data.recommended_action,
+          requires_referral: event.data.referral_needed,
+          referral_reason: event.data.referral_details,
+          ml_risk_assessment: event.data.ml_risk_level,
+        };
+
+        setResult(completeRecord);
         setPhase('complete');
       } else if (event.type === 'complete') {
         setPhase('complete');
@@ -94,9 +158,11 @@ export default function LiveTriageStream() {
         {classification && (
           <Grow in>
             <Box sx={{ ml: 5, mt: 1, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-              <RiskBadge level={classification.risk_level} />
-              <Chip label={`Confidence: ${(classification.confidence * 100).toFixed(0)}%`} size="small" sx={{ color: '#fff', borderColor: '#555' }} variant="outlined" />
-              <Chip label={classification.triage_category} size="small" sx={{ bgcolor: '#1A73E8', color: '#fff' }} />
+              <RiskBadge level={classification.prediction?.risk_level || 'Unknown'} />
+              <Chip label={`Confidence: ${classification.prediction?.max_confidence || 0}%`} size="small" sx={{ color: '#fff', borderColor: '#555' }} variant="outlined" />
+              {classification.prediction?.risk_code !== undefined && (
+                <Chip label={`Risk Code: ${classification.prediction.risk_code}`} size="small" sx={{ bgcolor: '#1A73E8', color: '#fff' }} />
+              )}
             </Box>
           </Grow>
         )}
@@ -121,9 +187,9 @@ export default function LiveTriageStream() {
               }}>
                 <Typography variant="caption" fontWeight={600} color="white">{sp.specialty}</Typography>
                 <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
-                  <Chip label={`R: ${(sp.relevance_score * 100).toFixed(0)}%`} size="small"
+                  <Chip label={`R: ${sp.relevance_score}/10`} size="small"
                     sx={{ fontSize: '0.65rem', height: 18, color: '#fff', bgcolor: '#333' }} />
-                  <Chip label={`U: ${(sp.urgency_score * 100).toFixed(0)}%`} size="small"
+                  <Chip label={`U: ${sp.urgency_score}/10`} size="small"
                     sx={{ fontSize: '0.65rem', height: 18, color: '#fff', bgcolor: '#333' }} />
                 </Box>
               </Paper>

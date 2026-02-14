@@ -15,7 +15,7 @@ export const mockPatientInput = {
 };
 
 
-const DataResult = {
+const ClassificationResult = {
   patient_id: "PT-2026-00127",
   patient_name: "Lakshmi Devi",
   age: 72,
@@ -274,13 +274,6 @@ const GeneralMedicineAgent = {
     }
   ]
 };
-
-
-
-/**
- * NeurologyAgent Mock Data
- * Focuses on secondary neurological risks related to hypertension.
- */
 
 const NeurologyAgent = {
   specialty: "Neurology",
@@ -634,56 +627,15 @@ const ChiefMedicalOfficerData = {
 };
 
 
-export const mockDashboardStats = {
-  totalPatientsToday: 24,
-  highCriticalCount: 8,
-  avgPriorityScore: 56,
-  referralsMade: 3,
-  riskDistribution: [
-    { name: 'Critical', value: 3, color: '#D32F2F' },
-    { name: 'High', value: 5, color: '#F57C00' },
-    { name: 'Medium', value: 9, color: '#FBC02D' },
-    { name: 'Low', value: 7, color: '#388E3C' },
-  ],
-  departmentLoad: [
-    { department: 'Emergency Medicine', count: 6 },
-    { department: 'Cardiology', count: 5 },
-    { department: 'General Medicine', count: 5 },
-    { department: 'Neurology', count: 3 },
-    { department: 'Pulmonology', count: 3 },
-    { department: 'Orthopedics', count: 2 },
-  ],
-  dailyTrend: [
-    { hour: '8AM', critical: 0, high: 1, medium: 2, low: 1 },
-    { hour: '9AM', critical: 1, high: 1, medium: 1, low: 2 },
-    { hour: '10AM', critical: 0, high: 2, medium: 2, low: 1 },
-    { hour: '11AM', critical: 1, high: 0, medium: 1, low: 1 },
-    { hour: '12PM', critical: 0, high: 1, medium: 2, low: 0 },
-    { hour: '1PM', critical: 1, high: 1, medium: 1, low: 2 },
-  ],
-  alertFrequency: [
-    { type: 'Critical Alerts', critical: 4, warning: 0, info: 0 },
-    { type: 'Warning Alerts', critical: 0, warning: 8, info: 0 },
-    { type: 'Info Alerts', critical: 0, warning: 0, info: 6 },
-  ],
-  specialistEngagement: [
-    { specialist: 'Cardiology', avgRelevance: 0.82 },
-    { specialist: 'Emergency Med', avgRelevance: 0.78 },
-    { specialist: 'Pulmonology', avgRelevance: 0.61 },
-    { specialist: 'General Med', avgRelevance: 0.58 },
-    { specialist: 'Neurology', avgRelevance: 0.45 },
-  ],
-};
 
-export const mockSSEEvents = [
-  { delay: 500, event: { type: 'status', data: { phase: 'classification', status: 'started', message: 'Analyzing patient vitals and symptoms...' } } },
-  { delay: 1500, event: { type: 'classification_result', data: mockClassificationResult } },
-  { delay: 500, event: { type: 'status', data: { phase: 'specialist_council', status: 'started', message: 'Convening specialist council...' } } },
-  ...mockSpecialistOpinions.map((op, i) => ({
-    delay: 500,
-    event: { type: 'specialist_opinion', data: op },
-  })),
-  { delay: 500, event: { type: 'status', data: { phase: 'cmo_synthesis', status: 'started', message: 'CMO synthesizing final verdict...' } } },
-  { delay: 1500, event: { type: 'cmo_verdict', data: mockCMOVerdict } },
-  { delay: 300, event: { type: 'complete', data: { message: 'Triage complete' } } },
+export const mockClassificationResult = ClassificationResult;
+
+export const mockSpecialistOpinions = [
+  CardiologyAgent,
+  NeurologyAgent,
+  PulmonologyAgent,
+  EmergencyMedicineAgent,
+  GeneralMedicineAgent,
+  OtherSpecialtyAgent
 ];
+

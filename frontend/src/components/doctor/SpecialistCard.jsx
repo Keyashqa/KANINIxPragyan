@@ -24,7 +24,7 @@ export default function SpecialistCard({ opinion }) {
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
           <Typography variant="subtitle1" fontWeight={700}>{opinion.specialty}</Typography>
           <Chip
-            label={`${(opinion.confidence * 100).toFixed(0)}%`}
+            label={opinion.confidence}
             size="small"
             sx={{ bgcolor: color, color: '#fff', fontWeight: 600 }}
           />
@@ -41,20 +41,20 @@ export default function SpecialistCard({ opinion }) {
         <Box sx={{ mb: 1 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
             <Typography variant="caption">Relevance</Typography>
-            <Typography variant="caption" fontWeight={600}>{(opinion.relevance_score * 100).toFixed(0)}%</Typography>
+            <Typography variant="caption" fontWeight={600}>{opinion.relevance_score}/10</Typography>
           </Box>
           <LinearProgress
-            variant="determinate" value={opinion.relevance_score * 100}
+            variant="determinate" value={opinion.relevance_score * 10}
             sx={{ height: 6, borderRadius: 3, bgcolor: '#E0E0E0', '& .MuiLinearProgress-bar': { bgcolor: color } }}
           />
         </Box>
         <Box sx={{ mb: 2 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
             <Typography variant="caption">Urgency</Typography>
-            <Typography variant="caption" fontWeight={600}>{(opinion.urgency_score * 100).toFixed(0)}%</Typography>
+            <Typography variant="caption" fontWeight={600}>{opinion.urgency_score}/10</Typography>
           </Box>
           <LinearProgress
-            variant="determinate" value={opinion.urgency_score * 100}
+            variant="determinate" value={opinion.urgency_score * 10}
             sx={{ height: 6, borderRadius: 3, bgcolor: '#E0E0E0', '& .MuiLinearProgress-bar': { bgcolor: color } }}
           />
         </Box>
