@@ -74,8 +74,8 @@ export default function DashboardLayout() {
             <IconButton sx={{ display: { md: 'none' }, mr: 1 }} onClick={() => setMobileOpen(true)}>
               <MenuIcon />
             </IconButton>
-            <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main' }}>TriageAI</Typography>
-            <Typography variant="body2" sx={{ ml: 1, color: 'text.secondary' }}>District Hospital</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main' }}>Ydhya</Typography>
+            <Typography variant="body2" sx={{ ml: 1, color: 'text.secondary' }}>Rapid Triage</Typography>
             <Box sx={{ flexGrow: 1 }} />
             <Typography variant="body2" color="text.secondary">
               {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
