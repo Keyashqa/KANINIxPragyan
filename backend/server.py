@@ -1,12 +1,14 @@
 import os
 import json
+import uuid
 import asyncio
+from datetime import datetime
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -41,7 +43,7 @@ app.add_middleware(
 
 
 # ─────────────────────────────────────────
-# ADK Setup (GLOBAL)
+# ADK Setup
 # ─────────────────────────────────────────
 
 APP_NAME = "triage_app"
@@ -53,6 +55,15 @@ runner = Runner(
     app_name=APP_NAME,
     session_service=session_service,
 )
+
+
+# ─────────────────────────────────────────
+# In-Memory Patient Store
+# ─────────────────────────────────────────
+
+patients_store: List[Dict[str, Any]] = []
+# Maps session_id -> {user_id, patient_data, status}
+active_sessions: Dict[str, Dict[str, Any]] = {}
 
 
 # ─────────────────────────────────────────
@@ -68,20 +79,229 @@ class PatientData(BaseModel):
     bp_systolic: int
     bp_diastolic: int
     heart_rate: int
-    temperature: float
+    temperature: float  # Celsius from frontend
     spo2: int
     conditions: List[str]
 
 
-class RunRequest(BaseModel):
-    user_id: str
-    session_id: str
-    patient_data: PatientData
+# ─────────────────────────────────────────
+# Post-Processing Functions
+# ─────────────────────────────────────────
+
+def _to_dict(obj: Any) -> Any:
+    if obj is None:
+        return None
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump()
+    if isinstance(obj, dict):
+        return obj
+    if isinstance(obj, str):
+        try:
+            return json.loads(obj)
+        except (json.JSONDecodeError, TypeError):
+            return {"raw": obj}
+    return obj
+
+
+SPECIALIST_KEYS = [
+    ("cardiology_opinion", "Cardiology"),
+    ("neurology_opinion", "Neurology"),
+    ("pulmonology_opinion", "Pulmonology"),
+    ("emergency_medicine_opinion", "Emergency Medicine"),
+    ("general_medicine_opinion", "General Medicine"),
+]
+
+
+def compute_specialist_summaries(state: Dict) -> List[Dict]:
+    summaries = []
+    for key, name in SPECIALIST_KEYS:
+        opinion = _to_dict(state.get(key))
+        if opinion:
+            summaries.append({
+                "specialty": opinion.get("specialty", name),
+                "relevance_score": opinion.get("relevance_score", 0),
+                "urgency_score": opinion.get("urgency_score", 0),
+                "confidence": opinion.get("confidence", "LOW"),
+                "one_liner": opinion.get("one_liner", ""),
+                "claims_primary": opinion.get("claims_primary", False),
+                "assessment": opinion.get("assessment", ""),
+            })
+    return summaries
+
+
+def compute_consolidated_workup(state: Dict) -> List[Dict]:
+    test_map: Dict[str, Dict] = {}
+    for key, name in SPECIALIST_KEYS:
+        opinion = _to_dict(state.get(key))
+        if not opinion:
+            continue
+        for item in opinion.get("recommended_workup", []):
+            if isinstance(item, str):
+                item = {"test": item, "priority": "ROUTINE", "rationale": ""}
+            test_name = item.get("test", "").strip()
+            if not test_name:
+                continue
+            normalized = test_name.lower()
+            if normalized in test_map:
+                existing = test_map[normalized]
+                existing["ordered_by"].append(name)
+                priority_rank = {"STAT": 3, "URGENT": 2, "ROUTINE": 1}
+                if priority_rank.get(item.get("priority", "ROUTINE"), 1) > priority_rank.get(existing["priority"], 1):
+                    existing["priority"] = item.get("priority", "ROUTINE")
+            else:
+                test_map[normalized] = {
+                    "test": test_name,
+                    "priority": item.get("priority", "ROUTINE"),
+                    "rationale": item.get("rationale", ""),
+                    "ordered_by": [name],
+                }
+    priority_order = {"STAT": 0, "URGENT": 1, "ROUTINE": 2}
+    return sorted(test_map.values(), key=lambda x: priority_order.get(x["priority"], 2))
+
+
+def compute_safety_alerts(state: Dict) -> List[Dict]:
+    alerts = []
+    for key, name in SPECIALIST_KEYS:
+        opinion = _to_dict(state.get(key))
+        if not opinion:
+            continue
+        for flag in opinion.get("flags", []):
+            if isinstance(flag, str):
+                flag = {"severity": "INFO", "label": flag, "pattern": None}
+            severity = flag.get("severity", "INFO")
+            if severity in ("RED_FLAG", "YELLOW_FLAG"):
+                alerts.append({
+                    "severity": "CRITICAL" if severity == "RED_FLAG" else "WARNING",
+                    "source": name,
+                    "label": flag.get("label", ""),
+                    "pattern": flag.get("pattern", ""),
+                })
+    return alerts
+
+
+def compute_priority_score(classification_result: Dict, state: Dict) -> int:
+    max_urgency = 0
+    max_relevance = 0
+    for key, _ in SPECIALIST_KEYS:
+        opinion = _to_dict(state.get(key))
+        if opinion:
+            max_urgency = max(max_urgency, opinion.get("urgency_score", 0))
+            max_relevance = max(max_relevance, opinion.get("relevance_score", 0))
+
+    risk_base = {"Low": 20, "Medium": 50, "High": 80}
+    prediction = classification_result.get("prediction", {}) if isinstance(classification_result, dict) else {}
+    risk_level = prediction.get("risk_level", "Medium")
+
+    score = (max_urgency * 0.4 + max_relevance * 0.3) * 10 + risk_base.get(risk_level, 50) * 0.3
+    return min(100, max(1, int(score)))
+
+
+def compute_council_consensus(state: Dict, cmo_verdict: Dict) -> str:
+    primary = cmo_verdict.get("primary_department", "")
+    agree_count = 0
+    total = 0
+    for key, name in SPECIALIST_KEYS:
+        opinion = _to_dict(state.get(key))
+        if not opinion:
+            continue
+        total += 1
+        if opinion.get("claims_primary"):
+            rec = opinion.get("recommended_department", "")
+            if rec and primary.lower() in rec.lower():
+                agree_count += 1
+            elif not rec:
+                agree_count += 1
+        else:
+            agree_count += 1  # Not claiming = not disagreeing
+    if total == 0:
+        return "Unknown"
+    ratio = agree_count / total
+    if ratio >= 0.9:
+        return "Unanimous"
+    elif ratio >= 0.5:
+        return "Majority"
+    return "Split"
+
+
+def compute_dissenting_opinions(state: Dict, cmo_verdict: Dict) -> List[Dict]:
+    primary = cmo_verdict.get("primary_department", "").lower()
+    dissenters = []
+    for key, name in SPECIALIST_KEYS:
+        opinion = _to_dict(state.get(key))
+        if not opinion:
+            continue
+        if opinion.get("claims_primary"):
+            rec = (opinion.get("recommended_department") or "").lower()
+            if rec and primary not in rec and rec not in primary:
+                dissenters.append({
+                    "specialty": name,
+                    "recommended": opinion.get("recommended_department"),
+                    "relevance_score": opinion.get("relevance_score", 0),
+                })
+    return dissenters
+
+
+def compute_key_factors(state: Dict, cmo_verdict: Dict) -> List[str]:
+    factors = []
+    explainability = cmo_verdict.get("explainability", {})
+    if isinstance(explainability, dict):
+        factors.extend(explainability.get("contributing_factors", []))
+
+    for key, name in SPECIALIST_KEYS:
+        opinion = _to_dict(state.get(key))
+        if not opinion:
+            continue
+        for flag in opinion.get("flags", []):
+            if isinstance(flag, dict) and flag.get("severity") == "RED_FLAG":
+                label = flag.get("label", "")
+                if label and label not in factors:
+                    factors.append(f"{name}: {label}")
+    return factors[:10]
+
+
+def compute_other_departments_flagged(state: Dict) -> List[Dict]:
+    other = _to_dict(state.get("other_specialty_opinion"))
+    if not other:
+        return []
+    flagged = []
+    for dept in other.get("departments", []):
+        if isinstance(dept, dict) and dept.get("relevance", 0) >= 3:
+            flagged.append(dept)
+    return sorted(flagged, key=lambda x: x.get("relevance", 0), reverse=True)
+
+
+def enrich_verdict(state: Dict) -> Dict:
+    cmo = _to_dict(state.get("cmo_verdict")) or {}
+    classification = _to_dict(state.get("classification_result")) or {}
+
+    cmo["specialist_summaries"] = compute_specialist_summaries(state)
+    cmo["consolidated_workup"] = compute_consolidated_workup(state)
+    cmo["safety_alerts"] = compute_safety_alerts(state)
+    cmo["priority_score"] = compute_priority_score(classification, state)
+    cmo["council_consensus"] = compute_council_consensus(state, cmo)
+    cmo["dissenting_opinions"] = compute_dissenting_opinions(state, cmo)
+    cmo["key_factors"] = compute_key_factors(state, cmo)
+    cmo["other_departments_flagged"] = compute_other_departments_flagged(state)
+
+    prediction = classification.get("prediction", {}) if isinstance(classification, dict) else {}
+    cmo["ml_risk_level"] = prediction.get("risk_level", "Unknown")
+
+    explainability = cmo.get("explainability", {})
+    if isinstance(explainability, dict):
+        cmo["confidence"] = explainability.get("confidence_score", 0.5)
+    else:
+        cmo["confidence"] = 0.5
+
+    return cmo
 
 
 # ─────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────
+
+def celsius_to_fahrenheit(c: float) -> float:
+    return round((c * 9 / 5) + 32, 1)
+
 
 async def ensure_session(user_id: str, session_id: str, initial_state: Dict):
     session = await session_service.get_session(
@@ -89,7 +309,6 @@ async def ensure_session(user_id: str, session_id: str, initial_state: Dict):
         user_id=user_id,
         session_id=session_id,
     )
-
     if session is None:
         await session_service.create_session(
             app_name=APP_NAME,
@@ -107,36 +326,235 @@ async def ensure_session(user_id: str, session_id: str, initial_state: Dict):
 
 
 # ─────────────────────────────────────────
-# Endpoint
+# SSE Helper
 # ─────────────────────────────────────────
 
-@app.post("/run/stream")
-async def run_agent_stream(req: RunRequest):
+def sse_event(event_type: str, data: Any) -> str:
+    return f"event: {event_type}\ndata: {json.dumps(data, default=str)}\n\n"
+
+
+# ─────────────────────────────────────────
+# Endpoints
+# ─────────────────────────────────────────
+
+@app.post("/api/triage")
+async def start_triage(patient: PatientData):
+    session_id = str(uuid.uuid4())
+    user_id = f"user_{uuid.uuid4().hex[:8]}"
+
+    patient_dict = patient.model_dump()
+    patient_dict["temperature"] = celsius_to_fahrenheit(patient.temperature)
+
+    initial_state = {"user_input": patient_dict}
+
+    await ensure_session(user_id, session_id, initial_state)
+
+    active_sessions[session_id] = {
+        "user_id": user_id,
+        "patient_data": patient.model_dump(),  # Keep original Celsius for frontend
+        "status": "pending",
+    }
+
+    return {"session_id": session_id, "user_id": user_id}
+
+
+@app.get("/api/triage/stream/{session_id}")
+async def stream_triage(session_id: str):
+    session_info = active_sessions.get(session_id)
+    if not session_info:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    user_id = session_info["user_id"]
 
     async def event_generator():
         try:
-            if not req.patient_data:
-                yield f"data: {json.dumps({'error': 'Missing patient_data'})}\n\n"
-                return
+            yield sse_event("status", {"message": "Pipeline started", "phase": "init"})
 
-            # 1️⃣ Initialize session state
-            initial_state = {
-                "user_input": req.patient_data.model_dump()
-            }
-
-            await ensure_session(
-                user_id=req.user_id,
-                session_id=req.session_id,
-                initial_state=initial_state,
-            )
-
-            # 2️⃣ Kickoff message
             content = types.Content(
                 role="user",
                 parts=[types.Part(text="START_TRIAGE")],
             )
 
-            # 3️⃣ Stream agent events
+            emitted_keys = set()
+
+            async for event in runner.run_async(
+                user_id=user_id,
+                session_id=session_id,
+                new_message=content,
+            ):
+                author = event.author or ""
+                text = ""
+                if event.content and event.content.parts:
+                    text = event.content.parts[0].text or ""
+
+                yield sse_event("status", {
+                    "message": f"{author}: processing",
+                    "phase": author,
+                    "text": text[:200] if text else "",
+                })
+
+            # Pipeline complete — read session state and emit structured events
+            session = await session_service.get_session(
+                app_name=APP_NAME,
+                user_id=user_id,
+                session_id=session_id,
+            )
+
+            if not session:
+                yield sse_event("error", {"message": "Session lost"})
+                return
+
+            state = session.state
+
+            # Emit classification_result
+            classification = _to_dict(state.get("classification_result"))
+            if classification:
+                yield sse_event("classification_result", classification)
+
+            # Emit specialist opinions
+            for key, name in SPECIALIST_KEYS:
+                opinion = _to_dict(state.get(key))
+                if opinion:
+                    yield sse_event("specialist_opinion", {
+                        "specialty": name,
+                        "data": opinion,
+                    })
+
+            # Emit other specialty scores
+            other = _to_dict(state.get("other_specialty_opinion"))
+            if other:
+                yield sse_event("other_specialty_scores", other)
+
+            # Emit enriched CMO verdict
+            enriched = enrich_verdict(state)
+            yield sse_event("cmo_verdict", enriched)
+
+            # Store in patients list
+            patient_entry = {
+                "session_id": session_id,
+                "patient_data": session_info["patient_data"],
+                "classification": classification,
+                "verdict": enriched,
+                "timestamp": datetime.now().isoformat(),
+            }
+            patients_store.append(patient_entry)
+            active_sessions[session_id]["status"] = "completed"
+
+            yield sse_event("complete", {"message": "Triage complete"})
+
+        except Exception as e:
+            yield sse_event("error", {"message": str(e)})
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ─────────────────────────────────────────
+# Dashboard Endpoints
+# ─────────────────────────────────────────
+
+@app.get("/api/dashboard/patients")
+async def get_patients():
+    return patients_store
+
+
+@app.get("/api/dashboard/stats")
+async def get_stats():
+    total = len(patients_store)
+    if total == 0:
+        return {
+            "totalPatientsToday": 0,
+            "highCriticalCount": 0,
+            "avgPriorityScore": 0,
+            "referralsMade": 0,
+            "riskDistribution": {"Low": 0, "Medium": 0, "High": 0},
+            "departmentLoad": {},
+            "alertFrequency": {"CRITICAL": 0, "WARNING": 0},
+        }
+
+    risk_dist = {"Low": 0, "Medium": 0, "High": 0}
+    dept_load: Dict[str, int] = {}
+    alert_freq = {"CRITICAL": 0, "WARNING": 0}
+    priority_sum = 0
+    high_critical = 0
+    referrals = 0
+
+    for p in patients_store:
+        verdict = p.get("verdict", {})
+
+        risk = verdict.get("final_risk_level", "Medium")
+        risk_dist[risk] = risk_dist.get(risk, 0) + 1
+
+        dept = verdict.get("primary_department", "Unknown")
+        dept_load[dept] = dept_load.get(dept, 0) + 1
+
+        priority_sum += verdict.get("priority_score", 50)
+
+        visual = verdict.get("dashboard", {})
+        if isinstance(visual, dict):
+            vpl = visual.get("visual_priority_level", "")
+            if vpl in ("HIGH", "CRITICAL"):
+                high_critical += 1
+
+        if verdict.get("referral_needed"):
+            referrals += 1
+
+        for alert in verdict.get("safety_alerts", []):
+            sev = alert.get("severity", "")
+            if sev in alert_freq:
+                alert_freq[sev] += 1
+
+    return {
+        "totalPatientsToday": total,
+        "highCriticalCount": high_critical,
+        "avgPriorityScore": round(priority_sum / total) if total else 0,
+        "referralsMade": referrals,
+        "riskDistribution": risk_dist,
+        "departmentLoad": dept_load,
+        "alertFrequency": alert_freq,
+    }
+
+
+# ─────────────────────────────────────────
+# Document Upload
+# ─────────────────────────────────────────
+
+@app.post("/api/upload/document")
+async def upload_document(file: UploadFile = File(...)):
+    content = await file.read()
+    text = content.decode("utf-8", errors="replace")
+    return {"filename": file.filename, "text": text[:5000]}
+
+
+# ─────────────────────────────────────────
+# Legacy endpoint (backwards compat)
+# ─────────────────────────────────────────
+
+class RunRequest(BaseModel):
+    user_id: str
+    session_id: str
+    patient_data: PatientData
+
+
+@app.post("/run/stream")
+async def run_agent_stream(req: RunRequest):
+    async def event_generator():
+        try:
+            initial_state = {"user_input": req.patient_data.model_dump()}
+            await ensure_session(req.user_id, req.session_id, initial_state)
+
+            content = types.Content(
+                role="user",
+                parts=[types.Part(text="START_TRIAGE")],
+            )
+
             async for event in runner.run_async(
                 user_id=req.user_id,
                 session_id=req.session_id,
@@ -147,40 +565,30 @@ async def run_agent_stream(req: RunRequest):
                     "is_final": event.is_final_response(),
                     "kind": "text",
                 }
-
                 if event.content and event.content.parts:
                     raw_text = event.content.parts[0].text
                     payload["text"] = raw_text
-
                     if raw_text and raw_text.strip().startswith("{"):
                         payload["kind"] = "structured"
 
                 yield f"data: {json.dumps(payload)}\n\n"
 
-            # 4️⃣ Fetch final verdict from session
             session = await session_service.get_session(
                 app_name=APP_NAME,
                 user_id=req.user_id,
                 session_id=req.session_id,
             )
-
             verdict = session.state.get("cmo_verdict")
-
             if verdict:
                 if hasattr(verdict, "model_dump"):
                     verdict = verdict.model_dump()
-
                 yield f"data: {json.dumps({'kind': 'cmo_verdict', 'data': verdict, 'is_final': True})}\n\n"
 
             yield "data: [DONE]\n\n"
-
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-    )
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 # ─────────────────────────────────────────

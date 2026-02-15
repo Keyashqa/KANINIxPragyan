@@ -1,13 +1,15 @@
-import { Chip } from '@mui/material';
+import { Chip, Tooltip } from '@mui/material';
 import { FLAG_COLORS } from '../../utils/constants';
 
-export default function FlagChip({ severity, label }) {
-  const style = FLAG_COLORS[severity] || FLAG_COLORS.INFO;
+export default function FlagChip({ severity, label, pattern }) {
+  const color = FLAG_COLORS[severity] || '#757575';
   return (
-    <Chip
-      label={label}
-      size="small"
-      sx={{ bgcolor: style.bg, color: style.color, fontWeight: 600, fontSize: '0.75rem' }}
-    />
+    <Tooltip title={pattern || ''} arrow>
+      <Chip
+        label={label}
+        size="small"
+        sx={{ bgcolor: color, color: '#fff', fontWeight: 600, mr: 0.5, mb: 0.5 }}
+      />
+    </Tooltip>
   );
 }

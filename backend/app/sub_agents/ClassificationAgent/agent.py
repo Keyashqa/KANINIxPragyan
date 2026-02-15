@@ -261,7 +261,7 @@ class ClassificationAgentImpl(BaseAgent):
         self, ctx: InvocationContext
     ) -> AsyncGenerator[Event, None]:
 
-        user_input = ctx.session.state.get("user_input")
+        user_input = ctx.session.state.get("raw_data")
 
         if not user_input:
             print("\n❌ ERROR: user_input missing in session state\n")

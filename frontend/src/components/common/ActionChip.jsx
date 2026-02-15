@@ -1,13 +1,13 @@
 import { Chip } from '@mui/material';
 import { ACTION_COLORS } from '../../utils/constants';
 
-export default function ActionChip({ action, size = 'medium' }) {
-  const style = ACTION_COLORS[action] || ACTION_COLORS['STANDARD'];
+export default function ActionChip({ action }) {
+  const color = ACTION_COLORS[action] || '#757575';
   return (
     <Chip
       label={action}
-      size={size}
-      sx={{ bgcolor: style.bg, color: style.color, fontWeight: 700 }}
+      size="small"
+      sx={{ bgcolor: color, color: '#fff', fontWeight: 600 }}
     />
   );
 }

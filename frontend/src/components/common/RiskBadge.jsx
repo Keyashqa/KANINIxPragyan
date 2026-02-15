@@ -1,18 +1,21 @@
 import { Chip } from '@mui/material';
 import { RISK_COLORS } from '../../utils/constants';
 
-export default function RiskBadge({ level, size = 'medium', sx = {} }) {
-  const color = RISK_COLORS[level] || '#757575';
+export default function RiskBadge({ level, size = 'medium' }) {
+  const color = RISK_COLORS[level] || '#9E9E9E';
+  const isCritical = level === 'Critical';
+
   return (
     <Chip
       label={level}
       size={size}
+      className={isCritical ? 'pulse-critical' : ''}
       sx={{
         bgcolor: color,
-        color: '#FFF',
+        color: '#fff',
         fontWeight: 700,
-        letterSpacing: 0.5,
-        ...sx,
+        fontSize: size === 'large' ? 16 : 13,
+        px: size === 'large' ? 2 : 0,
       }}
     />
   );

@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+.claude/
+.claude
+
+# Build output
+frontend/dist/
+frontend/build/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+*.whl
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Desktop.ini
+
+# Model artifacts (large files)
+backend/model/*.pkl
+backend/model/*.joblib
+backend/model/*.h5
+!backend/model/.gitkeep
+
+# Misc
+.claude/
+*.cpython-*.pyc

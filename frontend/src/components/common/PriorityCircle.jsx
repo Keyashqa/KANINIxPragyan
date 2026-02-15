@@ -1,45 +1,51 @@
-import { Box, CircularProgress, Typography } from '@mui/material';
+import { useEffect, useState } from 'react';
+import { Box, Typography } from '@mui/material';
 
 function getColor(score) {
-  if (score >= 80) return '#D32F2F';
-  if (score >= 60) return '#F57C00';
-  if (score >= 40) return '#FBC02D';
+  if (score >= 80) return '#B71C1C';
+  if (score >= 60) return '#D32F2F';
+  if (score >= 40) return '#F57C00';
   return '#388E3C';
 }
 
-export default function PriorityCircle({ score, size = 64 }) {
+export default function PriorityCircle({ score = 0, size = 100 }) {
+  const [display, setDisplay] = useState(0);
+  const r = (size - 10) / 2;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (display / 100) * circ;
   const color = getColor(score);
+
+  useEffect(() => {
+    let frame;
+    let start;
+    const duration = 800;
+    const animate = (ts) => {
+      if (!start) start = ts;
+      const progress = Math.min((ts - start) / duration, 1);
+      setDisplay(Math.round(progress * score));
+      if (progress < 1) frame = requestAnimationFrame(animate);
+    };
+    frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame);
+  }, [score]);
+
   return (
-    <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-      <CircularProgress
-        variant="determinate"
-        value={score}
-        size={size}
-        thickness={5}
-        sx={{ color, '& .MuiCircularProgress-circle': { strokeLinecap: 'round' } }}
-      />
-      <CircularProgress
-        variant="determinate"
-        value={100}
-        size={size}
-        thickness={5}
-        sx={{ color: '#E0E0E0', position: 'absolute', left: 0 }}
-      />
-      <CircularProgress
-        variant="determinate"
-        value={score}
-        size={size}
-        thickness={5}
-        sx={{ color, position: 'absolute', left: 0 }}
-      />
-      <Box sx={{
-        position: 'absolute', inset: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <Typography variant="caption" fontWeight={700} sx={{ color, fontSize: size * 0.22 }}>
-          {score}
-        </Typography>
-      </Box>
+    <Box sx={{ position: 'relative', width: size, height: size, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#E0E0E0" strokeWidth={6} />
+        <circle
+          cx={size / 2} cy={size / 2} r={r} fill="none"
+          stroke={color} strokeWidth={6} strokeLinecap="round"
+          strokeDasharray={circ} strokeDashoffset={offset}
+          style={{ transition: 'stroke-dashoffset 0.1s linear' }}
+        />
+      </svg>
+      <Typography
+        variant="h6"
+        sx={{ position: 'absolute', fontWeight: 700, color, fontSize: size * 0.28 }}
+      >
+        {display}
+      </Typography>
     </Box>
   );
 }

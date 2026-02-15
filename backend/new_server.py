@@ -1,6 +1,8 @@
 import os
 import json
 import uuid
+import httpx
+import fitz  # PyMuPDF
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
@@ -12,25 +14,13 @@ from google.genai import types
 
 from app.agent import root_agent
 
-
 # ─────────────────────────────────────────
-# Environment
+# Setup
 # ─────────────────────────────────────────
 
 load_dotenv()
-
-if not os.getenv("GOOGLE_API_KEY"):
-    raise RuntimeError("GOOGLE_API_KEY is not set")
-
-
-# ─────────────────────────────────────────
-# App Setup
-# ─────────────────────────────────────────
-
 app = FastAPI(title="TriageAI WhatsApp Webhook")
-
 APP_NAME = "triage_app"
-
 session_service = InMemorySessionService()
 
 runner = Runner(
@@ -39,64 +29,37 @@ runner = Runner(
     session_service=session_service,
 )
 
+# ─────────────────────────────────────────
+# PDF Parsing Logic
+# ─────────────────────────────────────────
+
+async def extract_text_from_pdf_url(url: str) -> str:
+    """Downloads a PDF from Twilio and extracts text."""
+    async with httpx.AsyncClient() as client:
+        # Twilio Media URLs are publicly accessible but expire
+        response = await client.get(url)
+        if response.status_code != 200:
+            return "Error: Could not download PDF."
+        
+        # Open PDF from memory
+        doc = fitz.open(stream=response.content, filetype="pdf")
+        text = ""
+        for page in doc:
+            text += page.get_text()
+        return text.strip()
 
 # ─────────────────────────────────────────
-# Session Helper
-# ─────────────────────────────────────────
-
-async def ensure_session(user_id: str, session_id: str, initial_state: dict):
-    session = await session_service.get_session(
-        app_name=APP_NAME,
-        user_id=user_id,
-        session_id=session_id,
-    )
-
-    if session is None:
-        await session_service.create_session(
-            app_name=APP_NAME,
-            user_id=user_id,
-            session_id=session_id,
-            state=initial_state,
-        )
-    else:
-        await session_service.update_session_state(
-            app_name=APP_NAME,
-            user_id=user_id,
-            session_id=session_id,
-            state=initial_state,
-        )
-
-
-# ─────────────────────────────────────────
-# TRIAGE HEADER
+# Formatting Helpers (Keeping your logic)
 # ─────────────────────────────────────────
 
 def build_triage_header(classification):
-
-    patient_name = classification.get("patient_name", "Unknown")
-    risk_level = classification["prediction"]["risk_level"]
-    confidence = classification["prediction"]["max_confidence"]
-
-    risk_emoji = (
-        "🟠" if risk_level == "High"
-        else "🟡" if risk_level == "Medium"
-        else "🟢"
-    )
-
-    header = (
-        f"🏥 *Ydhya TRIAGE RESULT*\n"
-        f"━━━━━━━━━━━━━━\n"
-        f"👤 {patient_name}\n"
-        f"{risk_emoji} Risk Level: {risk_level}\n"
-        f"📊 Confidence Score: {confidence}%\n\n"
-    )
-
-    return header
-
-
-# ─────────────────────────────────────────
-# CMO SECTION
-# ─────────────────────────────────────────
+    patient_name = classification.get("name", classification.get("patient_name", "Unknown"))
+    prediction = classification.get("prediction", {})
+    risk_level = prediction.get("risk_level", "Unknown")
+    confidence = prediction.get("max_confidence", 0)
+    risk_emoji = "🟠" if risk_level == "High" else "🟡" if risk_level == "Medium" else "🟢"
+    return (f"🏥 *Ydhya TRIAGE RESULT*\n━━━━━━━━━━━━━━\n👤 {patient_name}\n"
+            f"{risk_emoji} Risk Level: {risk_level}\n📊 Confidence Score: {confidence}%\n\n")
 
 def format_cmo_section(cmo):
 
@@ -161,40 +124,52 @@ def format_cmo_section(cmo):
 
     return message
 
-
 # ─────────────────────────────────────────
 # WhatsApp Webhook
 # ─────────────────────────────────────────
 
 @app.post("/whatsapp/callback")
 async def whatsapp_callback(request: Request):
-
     form_data = await request.form()
-
-    incoming_msg = form_data.get("Body")
+    
+    # Twilio Parameters
+    incoming_msg = form_data.get("Body", "")
     from_number = form_data.get("From")
+    media_url = form_data.get("MediaUrl0")
+    content_type = form_data.get("MediaContentType0")
 
     twilio_response = MessagingResponse()
 
-    if not incoming_msg:
-        twilio_response.message("Empty message received.")
-        return Response(content=str(twilio_response), media_type="application/xml")
+    # 1. PROCESS INPUT (TEXT OR PDF)
+    final_input_text = ""
 
     try:
-        patient_data = json.loads(incoming_msg)
+        if media_url and "application/pdf" in content_type:
+            # If user sent a PDF, extract its content
+            print(f"📎 Processing PDF from {from_number}...")
+            final_input_text = await extract_text_from_pdf_url(media_url)
+        else:
+            # Otherwise use the raw text message
+            final_input_text = incoming_msg
 
+        if not final_input_text:
+            return Response(content=str(twilio_response.message("No readable text or PDF found.")), media_type="application/xml")
+
+        # 2. SESSION SETUP
         user_id = from_number
         session_id = f"{from_number}_{uuid.uuid4().hex}"
 
-        await ensure_session(user_id, session_id, {
-            "user_input": patient_data
-        })
-
-        content = types.Content(
-            role="user",
-            parts=[types.Part(text="START_TRIAGE")],
+        # Send the extracted/raw text to the root agent
+        await session_service.create_session(
+            app_name=APP_NAME,
+            user_id=user_id,
+            session_id=session_id,
+            state={"user_input": final_input_text}
         )
 
+        # 3. TRIGGER AGENT RUN
+        content = types.Content(role="user", parts=[types.Part(text="PROCESS_NEW_PATIENT")])
+        
         classification_result = None
         cmo_verdict = None
 
@@ -207,45 +182,30 @@ async def whatsapp_callback(request: Request):
                 continue
 
             text = event.content.parts[0].text.strip()
+            # Clean possible markdown formatting
+            clean_text = text.replace("```json", "").replace("```", "").strip()
 
-            if event.author == "ClassificationAgent" and text.startswith("{"):
-                classification_result = json.loads(text)
+            if "Classification" in event.author and clean_text.startswith("{"):
+                classification_result = json.loads(clean_text)
 
-            if event.author == "ChiefMedicalOfficer" and text.startswith("{"):
-                cmo_verdict = json.loads(text)
+            if "ChiefMedicalOfficer" in event.author and clean_text.startswith("{"):
+                cmo_verdict = json.loads(clean_text)
 
-            if classification_result and cmo_verdict:
-                break
-
+        # 4. FINAL RESPONSE
         if classification_result and cmo_verdict:
-
             header = build_triage_header(classification_result)
-            cmo_section = format_cmo_section(cmo_verdict)
-
-            final_message = header + cmo_section
-
-            twilio_response.message(final_message)
-
+            cmo_body = format_cmo_section(cmo_verdict)
+            twilio_response.message(header + cmo_body)
         else:
-            twilio_response.message("Assessment completed but incomplete.")
-
-    except json.JSONDecodeError:
-        twilio_response.message("⚠️ Send valid JSON patient data.")
+            # Note: This usually triggers if the agent chain didn't finish or author names don't match
+            twilio_response.message("⚠️ The medical council is still deliberating. Please wait.")
 
     except Exception as e:
-        print("Webhook Error:", e)
-        twilio_response.message("❌ Error processing triage.")
+        print(f"Server Error: {e}")
+        twilio_response.message("❌ System Error: Could not process medical records.")
 
-    return Response(
-        content=str(twilio_response),
-        media_type="application/xml"
-    )
-
-
-# ─────────────────────────────────────────
-# Local Run
-# ─────────────────────────────────────────
+    return Response(content=str(twilio_response), media_type="application/xml")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("new_server:app", host="0.0.0.0", port=5000, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=5000)

@@ -1,64 +1,55 @@
 export const RISK_COLORS = {
-  CRITICAL: '#D32F2F',
-  HIGH: '#F57C00',
-  MEDIUM: '#FBC02D',
-  LOW: '#388E3C',
-};
-
-export const RISK_BG_COLORS = {
-  CRITICAL: '#FFEBEE',
-  HIGH: '#FFF3E0',
-  MEDIUM: '#FFFDE7',
-  LOW: '#E8F5E9',
+  Low: '#388E3C',
+  Medium: '#F57C00',
+  High: '#D32F2F',
+  Critical: '#B71C1C',
 };
 
 export const FLAG_COLORS = {
-  RED_FLAG: { bg: '#FFEBEE', color: '#D32F2F', label: 'Red Flag' },
-  YELLOW_FLAG: { bg: '#FFF8E1', color: '#F57C00', label: 'Yellow Flag' },
-  INFO: { bg: '#E3F2FD', color: '#1A73E8', label: 'Info' },
+  RED_FLAG: '#D32F2F',
+  YELLOW_FLAG: '#F57C00',
+  INFO: '#1565C0',
 };
 
 export const PRIORITY_COLORS = {
-  high: '#D32F2F',
-  medium: '#F57C00',
-  low: '#388E3C',
+  STAT: '#D32F2F',
+  URGENT: '#F57C00',
+  ROUTINE: '#9E9E9E',
 };
 
 export const ACTION_COLORS = {
-  IMMEDIATE: { bg: '#D32F2F', color: '#FFF' },
-  URGENT: { bg: '#F57C00', color: '#FFF' },
-  STANDARD: { bg: '#1A73E8', color: '#FFF' },
-  'CAN WAIT': { bg: '#388E3C', color: '#FFF' },
+  Immediate: '#D32F2F',
+  Urgent: '#F57C00',
+  Standard: '#ED6C02',
+  'Can Wait': '#388E3C',
 };
 
-export const DEPARTMENT_ICONS = {
-  Cardiology: 'FavoriteOutlined',
-  Neurology: 'PsychologyOutlined',
-  Pulmonology: 'AirOutlined',
-  'Emergency Medicine': 'LocalHospitalOutlined',
-  'General Medicine': 'MedicalServicesOutlined',
-  Orthopedics: 'AccessibilityNewOutlined',
-  Gastroenterology: 'ScienceOutlined',
-  Nephrology: 'WaterDropOutlined',
+export const VISUAL_PRIORITY_COLORS = {
+  LOW: '#388E3C',
+  MEDIUM: '#F57C00',
+  HIGH: '#D32F2F',
+  CRITICAL: '#B71C1C',
 };
 
 export const SYMPTOM_LIST = [
-  'Chest pain', 'Shortness of breath', 'Headache', 'Dizziness',
-  'Nausea', 'Vomiting', 'Fever', 'Cough', 'Fatigue', 'Weakness',
-  'Abdominal pain', 'Back pain', 'Joint pain', 'Swelling',
-  'Palpitations', 'Blurred vision', 'Numbness', 'Tingling',
-  'Loss of consciousness', 'Seizures', 'Difficulty breathing',
-  'Wheezing', 'Blood in stool', 'Blood in urine', 'Weight loss',
-  'Night sweats', 'Confusion', 'Anxiety', 'Insomnia', 'Loss of appetite',
+  'Chest pain', 'Shortness of breath', 'Headache', 'Dizziness', 'Nausea',
+  'Vomiting', 'Abdominal pain', 'Fever', 'Cough', 'Fatigue',
+  'Palpitations', 'Syncope', 'Confusion', 'Weakness', 'Numbness',
+  'Tingling', 'Blurred vision', 'Seizures', 'Back pain', 'Joint pain',
+  'Swelling', 'Rash', 'Difficulty swallowing', 'Loss of appetite', 'Weight loss',
+  'Night sweats', 'Blood in stool', 'Blood in urine', 'Difficulty breathing', 'Wheezing',
 ];
 
 export const CONDITION_LIST = [
-  'Hypertension', 'Diabetes Mellitus Type 2', 'Coronary Artery Disease',
-  'Asthma', 'COPD', 'Chronic Kidney Disease', 'Heart Failure',
-  'Stroke', 'Epilepsy', 'Thyroid Disorder', 'Anemia',
-  'Tuberculosis', 'Liver Disease',
+  'Hypertension', 'Diabetes Mellitus', 'Asthma', 'COPD', 'Heart Failure',
+  'Coronary Artery Disease', 'Stroke', 'Epilepsy', 'Chronic Kidney Disease',
+  'Liver Disease', 'Cancer', 'HIV/AIDS', 'Tuberculosis',
 ];
 
-export const SPECIALISTS = [
-  'Cardiology', 'Neurology', 'Pulmonology', 'Emergency Medicine', 'General Medicine',
-];
+export const SPECIALIST_ICONS = {
+  Cardiology: '\u2764\uFE0F',
+  Neurology: '\uD83E\uDDE0',
+  Pulmonology: '\uD83E\uDEC1',
+  'Emergency Medicine': '\uD83D\uDEA8',
+  'General Medicine': '\uD83E\uDE7A',
+};

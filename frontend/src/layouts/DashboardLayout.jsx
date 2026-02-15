@@ -1,155 +1,89 @@
 import { useState } from 'react';
-import { useNavigate, useLocation, Outlet } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
-  AppBar, Toolbar, Typography, Drawer, List, ListItemButton, ListItemIcon,
-  ListItemText, Box, ToggleButtonGroup, ToggleButton, IconButton, useMediaQuery,
-  Divider, Chip,
+  Box, Drawer, List, ListItemButton, ListItemIcon, ListItemText,
+  AppBar, Toolbar, Typography, IconButton, useMediaQuery, useTheme,
 } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
-import MenuIcon from '@mui/icons-material/Menu';
-import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
-import PersonAddIcon from '@mui/icons-material/PersonAdd';
-import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
-import QueueIcon from '@mui/icons-material/Queue';
-import WarningIcon from '@mui/icons-material/Warning';
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
-import { useRole } from '../context/RoleContext';
+import {
+  LocalHospital, People, Groups, BarChart, Menu as MenuIcon,
+} from '@mui/icons-material';
 
-const DRAWER_WIDTH = 260;
+const DRAWER_W = 240;
+const DRAWER_COLLAPSED = 64;
 
-const NAV_ITEMS = {
-  nurse: [
-    { label: 'Patient Intake', icon: <PersonAddIcon />, path: '/nurse' },
-  ],
-  doctor: [
-    { label: 'Patient Queue', icon: <QueueIcon />, path: '/doctor' },
-    { label: 'Alert Panel', icon: <WarningIcon />, path: '/doctor/alerts' },
-  ],
-  admin: [
-    { label: 'Analytics', icon: <DashboardIcon />, path: '/admin' },
-  ],
-};
+const NAV = [
+  { label: 'New Triage', icon: <LocalHospital />, path: '/' },
+  { label: 'Patient Queue', icon: <People />, path: '/queue' },
+  { label: 'Council View', icon: <Groups />, path: '/council' },
+  { label: 'Analytics', icon: <BarChart />, path: '/analytics' },
+];
 
 export default function DashboardLayout() {
-  const { role, setRole } = useRole();
-  const navigate = useNavigate();
-  const location = useLocation();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const compact = useMediaQuery('(max-width:1024px)');
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
 
-  const handleRoleChange = (_, newRole) => {
-    if (!newRole) return;
-    setRole(newRole);
-    navigate(`/${newRole}`);
-  };
+  const drawerWidth = compact ? DRAWER_COLLAPSED : DRAWER_W;
 
   const drawerContent = (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <LocalHospitalIcon color="primary" sx={{ fontSize: 32 }} />
-        <Box>
-          <Typography variant="h6" fontWeight={700} color="primary">
-            TriageAI
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            District Hospital Assistant
-          </Typography>
-        </Box>
-      </Box>
-      <Divider />
-      <Box sx={{ p: 2 }}>
-        <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-          ROLE
-        </Typography>
-        <ToggleButtonGroup
-          value={role}
-          exclusive
-          onChange={handleRoleChange}
-          size="small"
-          fullWidth
-          sx={{ '& .MuiToggleButton-root': { textTransform: 'none', fontWeight: 600, fontSize: '0.8rem' } }}
-        >
-          <ToggleButton value="nurse">Nurse</ToggleButton>
-          <ToggleButton value="doctor">Doctor</ToggleButton>
-          <ToggleButton value="admin">Admin</ToggleButton>
-        </ToggleButtonGroup>
-      </Box>
-      <Divider />
-      <List sx={{ flex: 1, px: 1 }}>
-        {(NAV_ITEMS[role] || []).map((item) => (
+    <Box sx={{ pt: 2 }}>
+      <List>
+        {NAV.map((item) => (
           <ListItemButton
             key={item.path}
-            selected={location.pathname === item.path}
-            onClick={() => {
-              navigate(item.path);
-              if (isMobile) setMobileOpen(false);
-            }}
-            sx={{ borderRadius: 2, mb: 0.5 }}
+            selected={pathname === item.path}
+            onClick={() => { navigate(item.path); setMobileOpen(false); }}
+            sx={{ mx: 1, borderRadius: 2, mb: 0.5 }}
           >
-            <ListItemIcon sx={{ minWidth: 40 }}>{item.icon}</ListItemIcon>
-            <ListItemText primary={item.label} />
+            <ListItemIcon sx={{ minWidth: compact ? 'unset' : 40 }}>{item.icon}</ListItemIcon>
+            {!compact && <ListItemText primary={item.label} />}
           </ListItemButton>
         ))}
       </List>
-      <Box sx={{ p: 2 }}>
-        <Chip
-          icon={<MedicalServicesIcon />}
-          label="Mock Mode"
-          size="small"
-          color="secondary"
-          variant="outlined"
-        />
-      </Box>
     </Box>
   );
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
-      {isMobile ? (
-        <Drawer
-          variant="temporary"
-          open={mobileOpen}
-          onClose={() => setMobileOpen(false)}
-          sx={{ '& .MuiDrawer-paper': { width: DRAWER_WIDTH } }}
-        >
-          {drawerContent}
-        </Drawer>
-      ) : (
-        <Drawer
-          variant="permanent"
-          sx={{
-            width: DRAWER_WIDTH,
-            '& .MuiDrawer-paper': { width: DRAWER_WIDTH, borderRight: '1px solid', borderColor: 'divider' },
-          }}
-        >
-          {drawerContent}
-        </Drawer>
-      )}
+    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+      {/* Mobile drawer */}
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        sx={{ display: { xs: 'block', md: 'none' }, '& .MuiDrawer-paper': { width: DRAWER_W } }}
+      >
+        {drawerContent}
+      </Drawer>
 
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <AppBar
-          position="sticky"
-          elevation={0}
-          sx={{ bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}
-        >
+      {/* Desktop drawer */}
+      <Drawer
+        variant="permanent"
+        sx={{
+          display: { xs: 'none', md: 'block' },
+          '& .MuiDrawer-paper': { width: drawerWidth, transition: 'width 0.2s', overflowX: 'hidden' },
+        }}
+      >
+        {drawerContent}
+      </Drawer>
+
+      <Box sx={{ flexGrow: 1, ml: { xs: 0, md: `${drawerWidth}px` }, transition: 'margin 0.2s' }}>
+        <AppBar position="sticky" elevation={0} sx={{ bgcolor: 'white', color: 'text.primary', borderBottom: '1px solid #E0E0E0' }}>
           <Toolbar>
-            {isMobile && (
-              <IconButton onClick={() => setMobileOpen(true)} sx={{ mr: 1 }}>
-                <MenuIcon />
-              </IconButton>
-            )}
-            <Typography variant="h6" color="text.primary" fontWeight={600} sx={{ flex: 1 }}>
-              {role === 'nurse' && 'Nurse Station'}
-              {role === 'doctor' && 'Doctor Console'}
-              {role === 'admin' && 'Admin Dashboard'}
+            <IconButton sx={{ display: { md: 'none' }, mr: 1 }} onClick={() => setMobileOpen(true)}>
+              <MenuIcon />
+            </IconButton>
+            <Typography variant="h6" sx={{ fontWeight: 700, color: 'primary.main' }}>TriageAI</Typography>
+            <Typography variant="body2" sx={{ ml: 1, color: 'text.secondary' }}>District Hospital</Typography>
+            <Box sx={{ flexGrow: 1 }} />
+            <Typography variant="body2" color="text.secondary">
+              {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </Typography>
-            <Chip label={new Date().toLocaleDateString('en-IN')} size="small" variant="outlined" />
           </Toolbar>
         </AppBar>
 
-        <Box sx={{ flex: 1, p: { xs: 2, md: 3 }, overflow: 'auto' }}>
+        <Box sx={{ p: { xs: 2, md: 3 } }}>
           <Outlet />
         </Box>
       </Box>
