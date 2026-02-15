@@ -1,4 +1,4 @@
-# TriageAI
+# Ydhya
 
 AI-powered triage assistant for India's sub-urban district hospitals. TriageAI uses a multi-agent pipeline to classify patient risk, gather specialist opinions, and deliver a consolidated verdict with workup plans — all in real-time via Server-Sent Events.
 
